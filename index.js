@@ -3,69 +3,12 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware для парсинга JSON
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// POST роут для обработки запросов
-app.post('*', async (req, res) => {
-  try {
-    // Получаем путь из оригинального запроса
-    const originalPath = req.path;
-    
-    // Формируем новый URL с доменом skillcorner.com
-    const targetUrl = `https://skillcorner.com${originalPath}`;
-    
-    console.log(`Проксирование запроса: ${req.method} ${targetUrl}`);
-    
-    // Получаем данные из тела запроса (если есть)
-    const requestData = Object.keys(req.body).length > 0 ? req.body : undefined;
-    
-    // Делаем запрос к SkillCorner
-    const response = await axios({
-      method: req.method,
-      url: targetUrl,
-      data: requestData,
-      headers: {
-        ...req.headers,
-        host: 'skillcorner.com',
-        // Удаляем заголовки, которые могут вызвать проблемы
-        'content-length': undefined,
-        'connection': undefined,
-      },
-      // Разрешаем редиректы
-      maxRedirects: 5,
-      validateStatus: () => true, // Принимаем любые статусы
-    });
-    
-    // Устанавливаем статус и заголовки ответа
-    res.status(response.status);
-    
-    // Копируем важные заголовки из ответа
-    if (response.headers['content-type']) {
-      res.setHeader('Content-Type', response.headers['content-type']);
-    }
-    
-    // Возвращаем данные
-    res.send(response.data);
-    
-  } catch (error) {
-    console.error('Ошибка при обработке запроса:', error.message);
-    
-    // Возвращаем ошибку клиенту
-    res.status(error.response?.status || 500).json({
-      error: 'Ошибка при проксировании запроса',
-      message: error.message,
-      details: error.response?.data || null
-    });
-  }
-});
-
-// Обработка GET запросов (опционально)
+// Теперь проксируем только GET запросы.
+// Для GET важно сохранять query string, поэтому используем req.originalUrl.
 app.get('*', async (req, res) => {
   try {
-    const originalPath = req.path;
-    const targetUrl = `https://skillcorner.com${originalPath}`;
+    const originalPathAndQuery = req.originalUrl; // включает путь + ?query
+    const targetUrl = `https://skillcorner.com${originalPathAndQuery}`;
     
     console.log(`Проксирование GET запроса: ${targetUrl}`);
     
@@ -95,8 +38,16 @@ app.get('*', async (req, res) => {
   }
 });
 
+// Явно запрещаем POST (т.к. вы попросили заменить на GET).
+app.post('*', (req, res) => {
+  res.status(405).json({
+    error: 'Method Not Allowed',
+    message: 'Этот сервер принимает только GET запросы'
+  });
+});
+
 // Запуск сервера
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
-  console.log(`Пример POST запроса: http://localhost:${PORT}/api/v1/endpoint`);
+  console.log(`Пример GET запроса: http://localhost:${PORT}/api/v1/endpoint`);
 });
